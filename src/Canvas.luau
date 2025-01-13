@@ -31,29 +31,32 @@ export type CanvasPrivate = typeof(Class)
 export type CanvasImpl = typeof(setmetatable({} :: CanvasPublic, {} :: CanvasPrivate))
 
 local function cleanOutput(output: string): any
+	-- local split = string.split(output, "")
 	if string.sub(output, 1, 7) == "<Buffer" then
 		output = output:gsub("<Buffer ", ""):gsub(">", "")
 		local split = string.split(output, " ")
+		local res = buffer.create(#split * 2)
 
-		local BYTE_SIZE = 4 -- u32 is 4 bytes (32 bits)
-		local res = buffer.create(#split * BYTE_SIZE)
-
+		-- This is not in a PNG format, first time using buffers and I already hate them.
 		for i in split do
 			local byte = tonumber(`0x{tostring(split[i])}`) :: number
-			buffer.writeu32(res, (i - 1) * BYTE_SIZE, byte)
+			buffer.writeu16(res, (i - 1), byte)
 		end
 
 		return res
+	elseif string.sub(output, 1, 6) == "<Path " then
+		output = output:gsub("<Path ", ""):gsub(">", "")
+		return output
+	elseif string.sub(output, 1, 7) == "<Debug " then
+		output = output:gsub("<Debug ", ""):gsub(">", "")
+		print(`Debug: {output}`)
+		return ""
 	elseif tonumber(output) ~= nil then
 		return tonumber(output)
 	end
 
-	local jsonResult = serde.decode("json", output)
-	if jsonResult then
-		return jsonResult
-	end
-
-	return output
+	-- When all else fails, try json conversion... (This is stupid)
+	return serde.decode("json", output)
 end
 
 local function forceProcess(commands: { commands: { { any }? }, height: number, width: number })
@@ -80,7 +83,7 @@ function Canvas.new(w: number?, h: number?, t: CanvasResultType?): CanvasImpl
 	return self
 end
 
-function Class._addCommand(self: CanvasImpl, command: string, scope: "Canvas" | "Context", ...: any)
+function Class._addCommand(self: CanvasImpl, command: string, scope: "Canvas" | "Context" | "Env", ...: any)
 	table.insert(self.javascriptCommands, { command, scope, ... })
 end
 
@@ -188,16 +191,34 @@ end
 -- Canvas implementations
 function Class.toBuffer(self: CanvasImpl)
 	self:_addCommand("toBuffer", "Canvas")
+	return self:Generate()
 end
 
-function Class.Generate(self: CanvasImpl): process.SpawnResult | any
+function Class.createImage(self: CanvasImpl)
+	self:_addCommand("createImage", "Canvas")
+	return self:Generate()
+end
+
+-- Env implementations
+function Class.setOutputName(self: CanvasImpl, newName: string)
+	self:_addCommand("fileName", "Env", newName)
+end
+
+function Class.setOutputLocation(self: CanvasImpl, newLocation: string)
+	self:_addCommand("fileLocation", "Env", newLocation)
+end
+
+function Class.Generate(self: CanvasImpl): any
 	local commands = {
 		width = self.width,
 		height = self.height,
 		commands = self.javascriptCommands,
 	}
 
-	return forceProcess(commands)
+	local result = forceProcess(commands)
+	table.clear(self.javascriptCommands)
+
+	return result
 end
 
 function Class.Destroy(self: CanvasImpl)

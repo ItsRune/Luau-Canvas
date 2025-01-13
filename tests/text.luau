@@ -11,4 +11,7 @@ context:fillText("Hello World!", 50, 50)
 local textSize = context:measureText("Hello World!")
 print(textSize)
 
-context:Generate()
+context:setOutputLocation("../output")
+context:setOutputName("text_output")
+
+context:createImage()

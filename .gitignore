@@ -5,5 +5,8 @@
 /*.rbxlx.lock
 /*.rbxl.lock
 
-# Node modules
+# Modules
 /node_modules
+
+# Test Junk
+/tests/buffer_img.png
